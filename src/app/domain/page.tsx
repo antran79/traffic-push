@@ -150,6 +150,88 @@ export default function DomainPage() {
     } catch (e:any) { setScenarioApiError(e.message); setScenarioLoading(false); }
   }
 
+  // === IMPORT JSON ===
+  const [showImportDialog, setShowImportDialog] = useState(false);
+  const [importDomain, setImportDomain] = useState("");
+  const [importDomainError, setImportDomainError] = useState("");
+  const [importGroup, setImportGroup] = useState("");
+  const [importGroupError, setImportGroupError] = useState("");
+  const [importJsonFile, setImportJsonFile] = useState<File|null>(null);
+  const [importJsonError, setImportJsonError] = useState("");
+  const [importJsonPreview, setImportJsonPreview] = useState<string>("");
+  const [importLoading, setImportLoading] = useState(false);
+
+  function getGroupsForImport(domain: string) {
+    const d = domains.find((d:any) => d.name === domain.trim());
+    return d ? d.groups : [];
+  }
+
+  function handleImportFile(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    setImportJsonFile(null);
+    setImportJsonError("");
+    setImportJsonPreview("");
+    if (file) {
+      if (!file.name.endsWith('.json')) {
+        setImportJsonError("Chỉ nhận file .json");
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        try {
+          const text = ev.target?.result as string;
+          const parsed = JSON.parse(text);
+          setImportJsonPreview(JSON.stringify(parsed, null, 2));
+          setImportJsonFile(file);
+        } catch {
+          setImportJsonError("File không phải JSON hợp lệ");
+        }
+      };
+      reader.readAsText(file);
+    }
+  }
+
+  async function handleImportJsonSubmit() {
+    setImportDomainError(""); setImportGroupError(""); setImportJsonError("");
+    if (!importDomain.trim()) {
+      setImportDomainError("Bạn phải nhập domain!"); return;
+    }
+    if (!domains.some(d=>d.name===importDomain.trim())) {
+      setImportDomainError("Domain không tồn tại!"); return;
+    }
+    if (!importGroup.trim()) {
+      setImportGroupError("Bạn phải chọn group!"); return;
+    }
+    if (!importJsonFile) {
+      setImportJsonError("Bạn phải upload file JSON!"); return;
+    }
+    if (!importJsonPreview) {
+      setImportJsonError("File chưa hợp lệ!"); return;
+    }
+    setImportLoading(true);
+    try {
+      const parsed = JSON.parse(importJsonPreview);
+      const res = await fetch('/api/domain/import-scenario', {
+        method: 'POST',
+        headers: {'Content-Type':'application/json'},
+        body: JSON.stringify({ domain: importDomain.trim(), groupName: importGroup.trim(), scenario: parsed })
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        const msg=data.error||'Import thất bại';
+        setImportJsonError(msg); toast({title:'Import thất bại', description: msg, variant:'destructive'});
+      } else {
+        toast({title:'Import thành công', description:`Đã import kịch bản cho ${importDomain}/${importGroup}`});
+        setShowImportDialog(false);
+        setImportDomain(""); setImportGroup(""); setImportJsonFile(null); setImportJsonPreview("");
+        fetchDomains();
+      }
+    } catch(e:any) {
+      setImportJsonError("JSON không hợp lệ hoặc lỗi mạng");
+    }
+    setImportLoading(false);
+  }
+
   // ===== Fetch liên tục domains & processing =====
   async function fetchDomains() {
     setLoading(true);
@@ -171,7 +253,7 @@ export default function DomainPage() {
     fetchProcessing();
     const iv = setInterval(()=> {
       fetchProcessing();
-    }, 10000);
+    }, 2000);
     return () => clearInterval(iv);
   }, []);
 
@@ -258,8 +340,12 @@ export default function DomainPage() {
           {/* Button Tạo kịch bản */}
           <Button variant="outline" className="gap-2" onClick={()=>setShowScenarioDialog(true)}><FileCode className="w-5 h-5" />Tạo kịch bản</Button>
           {/* Button Import/Export CSV (để không xử lý) */}
-          <Button variant="outline" className="gap-2"><FileUp className="w-5 h-5" />Import CSV</Button>
-          <Button variant="outline" className="gap-2"><FileDown className="w-5 h-5" />Export CSV</Button>
+          <Button variant="outline" className="gap-2" onClick={() => setShowImportDialog(true)}>
+            <FileUp className="w-5 h-5" />Import JSON
+          </Button>
+          <Button variant="outline" className="gap-2">
+            <FileDown className="w-5 h-5" />Export JSON
+          </Button>
         </div>
       </div>
 
@@ -282,7 +368,7 @@ export default function DomainPage() {
                   <div className="text-xs text-gray-500 pl-1">{new Date(domain.createdAt).toLocaleString("vi-VN")}</div>
                 </AccordionTrigger>
                 <AccordionContent className="bg-purple-50/30 rounded-b-2xl px-8 pb-5 pt-2">
-                  {(domain.groups||[]).map((group: { groupName: string; scenarios: any[] }) => (
+                  {(domain.groups||[]).map((group: any) => (
                     <Accordion key={group.groupName} type="single" collapsible className="mb-4">
                       <AccordionItem
                         value={group.groupName}
@@ -292,7 +378,7 @@ export default function DomainPage() {
                           <span className="mr-auto">{group.groupName}</span>
                         </AccordionTrigger>
                         <AccordionContent className="pl-6 pb-2">
-                          <div className="bg-slate-100 border border-cyan-200 rounded-lg p-3 font-mono text-xs text-slate-900 overflow-x-auto select-all shadow-sm whitespace-pre">
+                          <div className="bg-slate-100 border border-cyan-200 rounded-lg p-3 font-mono text-xs text-slate-900 select-all shadow-sm whitespace-pre max-h-52 overflow-auto">
                             {JSON.stringify(group.scenarios, null, 2)}
                           </div>
                         </AccordionContent>
@@ -417,6 +503,55 @@ export default function DomainPage() {
               <Button variant="secondary" disabled={scenarioLoading}>Đóng</Button>
             </DialogClose>
             <Button onClick={handleScenarioSubmit} disabled={scenarioLoading}>{scenarioLoading ? "Đang gửi..." : "Tạo kịch bản"}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* --- Dialog Import JSON --- */}
+      <Dialog open={showImportDialog} onOpenChange={setShowImportDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Import kịch bản AI từ JSON</DialogTitle>
+            <DialogDescription>
+              Nhập domain, chọn group, upload file JSON kịch bản AI (1 group chỉ được 1 kịch bản).
+            </DialogDescription>
+          </DialogHeader>
+          <Input
+            placeholder="Nhập domain..."
+            value={importDomain}
+            onChange={e => { setImportDomain(e.target.value); setImportGroup(""); }}
+            autoFocus
+          />
+          {importDomainError && <div className="text-red-500 text-xs mb-2">{importDomainError}</div>}
+          <select
+            disabled={!importDomain.trim() || !domains.some(d=> d.name===importDomain.trim())}
+            className="w-full p-2 mb-1 border rounded text-gray-900 bg-slate-50"
+            value={importGroup}
+            onChange={e => setImportGroup(e.target.value)}
+          >
+            <option value="">Chọn group trong domain...</option>
+            {getGroupsForImport(importDomain.trim()).map((g:any) => (
+              <option key={g.groupName} value={g.groupName}>{g.groupName}</option>
+            ))}
+          </select>
+          {importGroupError && <div className="text-red-500 text-xs mb-2">{importGroupError}</div>}
+          <input
+            type="file"
+            accept=".json,application/json"
+            onChange={handleImportFile}
+            className="block my-2"
+          />
+          {importJsonError && <div className="text-red-500 text-xs mb-1">{importJsonError}</div>}
+          {importJsonPreview && !importJsonError && (
+            <div className="bg-slate-100 border border-cyan-200 rounded-lg p-3 font-mono text-xs text-slate-900 overflow-x-auto select-all shadow-sm whitespace-pre mb-2" style={{maxHeight:180}}>
+              {importJsonPreview}
+            </div>
+          )}
+          <DialogFooter className="gap-2 flex-row">
+            <DialogClose asChild>
+              <Button variant="secondary" disabled={importLoading}>Hủy</Button>
+            </DialogClose>
+            <Button onClick={handleImportJsonSubmit} disabled={importLoading}>{importLoading ? "Đang import..." : "Import JSON"}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
