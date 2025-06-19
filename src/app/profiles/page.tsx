@@ -453,7 +453,8 @@ export default function ProfilesPage() {
                     <table className="min-w-[600px] w-full border bg-white rounded shadow-sm">
                       <thead className="bg-slate-100 text-slate-700 sticky top-0 z-10">
                         <tr>
-                          <th className="p-2">STT</th>
+                          <th className="p-2 text-center">STT</th>
+                          <th className="p-2 text-left">Tên profile</th>
                           <th className="p-2 text-left">User Agent</th>
                           <th className="p-2 text-center">Viewport</th>
                           <th className="p-2 text-center">Quốc gia</th>
@@ -461,24 +462,16 @@ export default function ProfilesPage() {
                         </tr>
                       </thead>
                       <tbody>
-                        {group.profiles.map((p, i) => {
-                          let country = "🌏";
-                          if (typeof p.languages === "string" && COUNTRY_BY_LANG[p.languages]) {
-                            country = `${COUNTRY_BY_LANG[p.languages].flag} ${COUNTRY_BY_LANG[p.languages].label}`;
-                          } else if (Array.isArray(p.languages) && p.languages.length > 0 && COUNTRY_BY_LANG[p.languages[0]]) {
-                            country = `${COUNTRY_BY_LANG[p.languages[0]].flag} ${COUNTRY_BY_LANG[p.languages[0]].label}`;
-                          }
-                          const viewportString = getViewportString(p);
-                          return (
-                            <tr className="border-b last:border-0 align-middle" key={p.id}>
-                              <td className="p-2 text-center align-middle">{i + 1}</td>
-                              <td className="p-2 max-w-[240px] truncate align-middle text-left">{p.userAgent || ""}</td>
-                              <td className="p-2 text-center align-middle">{viewportString}</td>
-                              <td className="p-2 text-center align-middle">{getCountry(p.languages)}</td>
-                              <td className="p-2 text-sm text-center align-middle">{new Date(p.createdAt).toLocaleString("vi-VN")}</td>
-                            </tr>
-                          );
-                        })}
+                        {group.profiles.map((p, i) => (
+                          <tr className="border-b last:border-0 align-middle" key={p.id}>
+                            <td className="p-2 text-center align-middle">{i + 1}</td>
+                            <td className="p-2 text-left align-middle max-w-[172px] truncate">{p.name}</td>
+                            <td className="p-2 max-w-[240px] truncate align-middle text-left">{p.userAgent || ""}</td>
+                            <td className="p-2 text-center align-middle">{getViewportString(p)}</td>
+                            <td className="p-2 text-center align-middle">{getCountry(p.languages)}</td>
+                            <td className="p-2 text-sm text-center align-middle">{new Date(p.createdAt).toLocaleString("vi-VN")}</td>
+                          </tr>
+                        ))}
                       </tbody>
                     </table>
                   </div>

@@ -47,7 +47,7 @@ export default function DomainPage() {
       setAddErrors(["Vui lòng nhập ít nhất 1 domain!"]); return;
     }
     setAddDomainLoading(true);
-    let errs: string[] = [];
+    const errs: string[] = [];
     for (const name of lines) {
       try {
         const res = await fetch("/api/domain", {

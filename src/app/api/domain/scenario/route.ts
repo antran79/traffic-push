@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { type NextRequest, NextResponse } from 'next/server';
 import { dbConnect } from '@/lib/db';
 import { redisClient } from '@/lib/redis';
 import { Domain } from '@/models/Domain';
