@@ -1,5 +1,5 @@
 "use client";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
@@ -32,24 +32,6 @@ type ProfileGroup = {
   profiles: Profile[];
   createdAt: string;
 };
-
-const INIT_GROUPS: ProfileGroup[] = [
-  {
-    id: "g1",
-    groupName: "Google Accounts",
-    createdAt: new Date(Date.now() - 1000e3).toISOString(),
-    profiles: [
-      { id: "p1", name: "Nguyen Van A", browser: "Chrome", os: "Windows", proxy: "", createdAt: new Date().toISOString() },
-      { id: "p2", name: "Le Van B", browser: "Firefox", os: "MacOS", proxy: "proxy1:123", createdAt: new Date().toISOString() }
-    ]
-  },
-  {
-    id: "g2",
-    groupName: "Ads Projects",
-    createdAt: new Date(Date.now() - 2000e3).toISOString(),
-    profiles: []
-  }
-];
 
 const PAGE_SIZE = 5;
 
@@ -238,10 +220,13 @@ function getCountry(languages: any): string {
 // Bổ sung state mapping cho locale
 export default function ProfilesPage() {
   const { toast } = useToast();
-  const [groups, setGroups] = useState<ProfileGroup[]>(INIT_GROUPS);
+  const [groups, setGroups] = useState<ProfileGroup[]>([]);
   const [loading, setLoading] = useState(false);
   const [search, setSearch] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalGroup, setTotalGroup] = useState(0);
+  const [totalProfiles, setTotalProfiles] = useState(0);
   const [localeIdx, setLocaleIdx] = useState(0);
   const [uaIdx, setUaIdx] = useState(0);
   const [viewportIdx, setViewportIdx] = useState(0);
@@ -290,102 +275,102 @@ export default function ProfilesPage() {
   const [localIp, setLocalIp] = useState("");
   const [publicIp, setPublicIp] = useState("");
 
+  // Hàm fetchGroups để lấy danh sách group từ API
+  const fetchGroups = async (page = currentPage, searchParam = search) => {
+    setLoading(true);
+    let url = `/api/profile/groups?page=${page}&limit=${PAGE_SIZE}`;
+    if (searchParam && searchParam.trim()) url += `&search=${encodeURIComponent(searchParam)}`;
+    const res = await fetch(url);
+    const data = await res.json();
+    setGroups(Array.isArray(data.groups) ? data.groups : []);
+    setTotalPages(data.totalPages || 1);
+    setTotalGroup(data.total || 0);
+    setTotalProfiles(data.totalProfiles || 0);
+    setLoading(false);
+  };
+
   // Dialog Thêm group
-  function handleAddGroup() {
+  async function handleAddGroup() {
     setAddGroupError("");
     const names = groupInput.split(/\r?\n/).map(x => x.trim()).filter(x => x);
     if (!names.length) {
       setAddGroupError("Nhập ít nhất 1 tên group, mỗi dòng là 1 group!");
       return;
     }
-    // Kiểm tra đã tồn tại và nhóm hợp lệ mới
-    const existed = new Set(groups.map(g => g.groupName.toLowerCase()));
-    let added: string[] = [];
-    let errors: string[] = [];
-    let uniqueInForm: Set<string> = new Set();
-    for (const name of names) {
-      if (!name) continue;
-      if (uniqueInForm.has(name.toLowerCase())) { errors.push(`"${name}" bị trùng trong danh sách.`); continue; }
-      uniqueInForm.add(name.toLowerCase());
-      if (existed.has(name.toLowerCase())) {
-        errors.push(`"${name}" đã có trong danh sách.`); continue;
-      }
-      added.push(name);
+    const res = await fetch('/api/profile/group', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ groupNames: names })
+    });
+    const data = await res.json();
+    if (!res.ok || !data.success) {
+      setAddGroupError(data.error || 'Thêm nhóm thất bại');
+      return;
     }
-    if (added.length) {
-      setGroups(g => [
-        ...added.map(groupName => ({
-          id: Math.random().toString(36).slice(2),
-          groupName,
-          createdAt: new Date().toISOString(),
-          profiles: []
-        })),
-        ...g
-      ]);
-      toast({
-        title: `Đã thêm ${added.length} group`,
-        description: added.join(", "),
-      });
-      setShowAddGroup(false); setGroupInput(""); setAddGroupError("");
-    }
-    if (added.length === 0 && errors.length) setAddGroupError(errors.join(" \n"));
-    else if (added.length > 0 && errors.length) toast({title: "Có lỗi với một số group", description: errors.join(" | "), variant: "destructive" });
+    setShowAddGroup(false); setGroupInput(""); setAddGroupError("");
+    toast({ title: `Đã thêm ${data.groups.length} group`, description: names.join(", ") });
+    fetchGroups(currentPage);
   }
 
   // Dialog Thêm profiles
-  function handleAddProfile(groupId: string) {
+  async function handleAddProfile(groupId: string) {
     const baseName = profileName.trim() || "Profile";
     if (profileCount < 1 || profileCount > 50) {
       toast({title: "Giới hạn số lượng profile từ 1-50", variant: "destructive"});
       return;
     }
-    setGroups(gs => gs.map(g => g.id===groupId ? {
-      ...g,
-      profiles: [
-        ...Array.from({length: profileCount}, (_, i) => {
-          // Xác định locale và userAgent
-          let useLocaleIdx = localeIdx;
-          if (localeIdx === LOCALE_MAP.length-1) { // Nếu chọn random
-            useLocaleIdx = Math.floor(Math.random() * (LOCALE_MAP.length-1));
-          }
-          const locale = LOCALE_MAP[useLocaleIdx];
-          // Random UA trong preset nếu chọn random UA
-          let useUaIdx = uaIdx;
-          if (uaIdx === 0 || locale.userAgents.length === 1) {
-            useUaIdx = Math.floor(Math.random() * locale.userAgents.length);
-          }
-          const ua = locale.userAgents[useUaIdx];
-          // ... viewport như trước ...
-          let w = null, h = null;
-          if(viewportIdx === 0) {
-            const pair = VIEWPORTS[Math.floor(Math.random() * (VIEWPORTS.length - 1)) + 1];
-            w = pair.width; h = pair.height; }
-          else {
-            w = VIEWPORTS[viewportIdx].width;
-            h = VIEWPORTS[viewportIdx].height;
-          }
-          // Các field khác
-          // ... dùng như trước, nhưng thay userAgent, languages,... theo locale ...
-          return {
-            id: Math.random().toString(36).slice(2),
-            name: profileCount === 1 ? baseName : `${baseName} #${i + 1}`,
-            browser: browser,
-            os: os,
-            proxy,
-            createdAt: new Date().toISOString(),
-            userAgent: ua,
-            languages: [locale.language],
-            timezone: locale.timezone,
-            latitude: locale.latitude,
-            longitude: locale.longitude,
-            geoAccuracy: locale.accuracy,
-            width: w, height: h,
-            // ... giữ các field fingerprint khác như trước ...
-          };
-        }), ...g.profiles]
-    } : g));
-    // Reset form ...
-    setShowAddProfileGroupId(null); // <-- Thêm dòng này để đóng Dialog
+    // Generate batch profiles, random từng profile nếu chọn Random
+    const newProfiles = Array.from({ length: profileCount }, (_, i) => {
+      // Locale
+      let useLocaleIdx = localeIdx;
+      if (localeIdx === LOCALE_MAP.length-1) { // Nếu 'Random'
+        useLocaleIdx = Math.floor(Math.random() * (LOCALE_MAP.length-1));
+      }
+      const locale = LOCALE_MAP[useLocaleIdx];
+      let useUaIdx = uaIdx;
+      if (uaIdx === 0 || locale.userAgents.length === 1) {
+        useUaIdx = Math.floor(Math.random() * locale.userAgents.length);
+      }
+      const ua = locale.userAgents[useUaIdx];
+      // Viewport
+      let w = null, h = null;
+      if(viewportIdx === 0) {
+        const pair = VIEWPORTS[Math.floor(Math.random() * (VIEWPORTS.length - 1)) + 1];
+        w = pair.width; h = pair.height;
+      } else {
+        w = VIEWPORTS[viewportIdx].width; h = VIEWPORTS[viewportIdx].height;
+      }
+      return {
+        name: profileCount === 1 ? baseName : `${baseName} #${i + 1}`,
+        userAgent: ua,
+        languages: [locale.language],
+        timezone: locale.timezone,
+        latitude: locale.latitude,
+        longitude: locale.longitude,
+        geoAccuracy: locale.accuracy,
+        width: w, height: h,
+        deviceScaleFactor: 1,
+        isMobile,
+        hasTouch,
+        proxy,
+        browser,
+        os,
+        createdAt: new Date().toISOString(),
+      };
+    });
+    const res = await fetch('/api/profile', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ groupId, profiles: newProfiles })
+    });
+    const data = await res.json();
+    if (!res.ok || !data.success) {
+      toast({ title: "Thêm profiles thất bại", description: data.error||'', variant: "destructive" });
+      return;
+    }
+    setShowAddProfileGroupId(null); setProfileName(""); setProfileCount(1); // reset form
+    toast({title: `Đã thêm ${profileCount} profile`, description: baseName});
+    fetchGroups(currentPage);
   }
 
   // Tìm kiếm
@@ -394,30 +379,37 @@ export default function ProfilesPage() {
   if (s) {
     filteredGroups = groups
       .map(g => ({ ...g, profiles: g.profiles.filter(p => p.name.toLowerCase().includes(s)) }))
-      .filter(g => g.groupName.toLowerCase().includes(s) || g.profiles.length > 0);
+      .filter(g => g.name.toLowerCase().includes(s) || g.profiles.length > 0);
   }
 
-  // Phân trang nhóm
-  const totalPages = Math.ceil(filteredGroups.length / PAGE_SIZE)||1;
-  const pagedGroups = filteredGroups.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE);
+  // Phân trang nhóm lấy từ API, chỉ cần state totalPages và groups
+  const pagedGroups = groups; // dùng trực tiếp luôn FE mapping, không cần slice nếu API paging
+
+  useEffect(() => { fetchGroups(currentPage, search); }, [currentPage]);
+  useEffect(() => { fetchGroups(1, search); }, [search]);
 
   return (
     <main className="px-5 py-8 max-w-6xl mx-auto">
       {/* Card tổng quan profile & group */}
       <div className="flex flex-col md:flex-row md:justify-between gap-4 mb-8">
         <Card className="flex-1 p-6 flex flex-col items-center justify-center border border-purple-200 bg-white/95 shadow-sm rounded-xl">
-          <div className="text-3xl font-bold text-purple-600 mb-1">{groups.reduce((acc,g)=>acc+g.profiles.length,0)}</div>
+          <div className="text-3xl font-bold text-purple-600 mb-1">{totalProfiles}</div>
           <div className="text-gray-700 text-base text-center font-medium">Profile đang quản lý</div>
         </Card>
         <Card className="flex-1 p-6 flex flex-col items-center justify-center border border-cyan-200 bg-white/95 shadow-sm rounded-xl">
-          <div className="text-3xl font-bold text-cyan-600 mb-1">{groups.length}</div>
+          <div className="text-3xl font-bold text-cyan-600 mb-1">{totalGroup}</div>
           <div className="text-gray-700 text-base text-center font-medium">Nhóm (group) profile</div>
         </Card>
       </div>
       {/* Thanh tìm kiếm + button */}
       <div className="flex flex-col md:flex-row md:items-center gap-4 mb-8">
         <div className="flex flex-1 gap-2">
-          <Input placeholder="Tìm group hoặc profile..." value={search} onChange={e=>setSearch(e.target.value)} className="max-w-xs"/>
+          <Input
+            placeholder="Tìm group hoặc profile..."
+            value={search}
+            onChange={e=>{ setSearch(e.target.value); setCurrentPage(1); }}
+            className="max-w-xs"
+          />
         </div>
         <div className="flex gap-2 w-full md:w-auto">
           <Button className="gap-2" onClick={()=>setShowAddGroup(true)}><Plus className="w-5 h-5"/>Thêm group</Button>
@@ -425,10 +417,10 @@ export default function ProfilesPage() {
       </div>
       {/* Danh sách group+profile dạng Accordion giống domain */}
       <Accordion type="multiple" className="space-y-5">
-        {pagedGroups.map(group => (
-          <AccordionItem value={group.id} key={group.id} className="border border-purple-100 bg-white rounded-2xl shadow-md px-0">
+        {groups.map(group => (
+          <AccordionItem value={group._id} key={group._id} className="border border-purple-100 bg-white rounded-2xl shadow-md px-0">
             <AccordionTrigger className="font-bold text-base md:text-lg text-purple-800 px-7 py-4 rounded-2xl transition-colors justify-between text-left no-underline hover:bg-purple-50 focus:bg-purple-100 group-data-[state=open]:bg-purple-50">
-              <span className="mr-auto">{group.groupName}</span>
+              <span className="mr-auto">{group.name}</span>
               <div className="text-xs text-gray-500 pl-1 flex items-center gap-2">
                 <span>{group.profiles.length} profiles</span>
                 {/* Đổi Button thành span, hoặc đưa Button ra ngoài AccordionTrigger */}
@@ -436,7 +428,7 @@ export default function ProfilesPage() {
                   className="inline-flex items-center gap-1 py-1 px-2 border rounded cursor-pointer hover:bg-cyan-50"
                   onClick={e => {
                     e.stopPropagation();
-                    setShowAddProfileGroupId(group.id);
+                    setShowAddProfileGroupId(group._id);
                   }}
                   style={{ userSelect: "none" }}
                 >
@@ -515,7 +507,17 @@ export default function ProfilesPage() {
         </DialogContent>
       </Dialog>
       {/* Dialog Thêm profiles */}
-      <Dialog open={!!showAddProfileGroupId} onOpenChange={v=>{if(!v)setShowAddProfileGroupId(null);}}>
+      <Dialog
+        open={!!showAddProfileGroupId}
+        onOpenChange={v => {
+          if (!v) {
+            setShowAddProfileGroupId(null);
+            setProfileName("");
+            setProfileCount(1);
+            // reset các state khác nếu cần
+          }
+        }}
+      >
         <DialogContent className="max-h-[92vh] overflow-y-auto max-w-3xl w-full">
           <DialogHeader>
             <DialogTitle>Thêm profile vào group</DialogTitle>
