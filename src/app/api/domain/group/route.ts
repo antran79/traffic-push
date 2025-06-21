@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { type NextRequest, NextResponse } from 'next/server';
 import { dbConnect } from '@/lib/db';
 import { Domain } from '@/models/Domain';
 
@@ -15,7 +15,7 @@ export async function POST(req: NextRequest) {
   const groupExist = doc.groups.map(g => g.groupName);
   const errors: string[] = [];
   const toAdd: string[] = [];
-  for (let gname of groupNames) {
+  for (const gname of groupNames) {
     if (!gname) errors.push('Không được để trống tên group.');
     else if (groupExist.includes(gname)) errors.push(`Group "${gname}" đã tồn tại trong domain.`);
     else toAdd.push(gname);
@@ -24,7 +24,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: errors.join(' ') }, { status: 400 });
   }
   // Thêm group
-  for (let gname of toAdd) {
+  for (const gname of toAdd) {
     doc.groups.push({ groupName: gname });
   }
   await doc.save();

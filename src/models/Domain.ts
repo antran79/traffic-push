@@ -1,4 +1,5 @@
-import mongoose, { Schema, models, model, Document } from 'mongoose';
+import type mongoose from 'mongoose';
+import { Schema, models, model, type Document } from 'mongoose'
 
 export interface Scenario {
   _id: mongoose.Types.ObjectId;

@@ -1,4 +1,4 @@
-import { NextRequest, NextResponse } from 'next/server';
+import { type NextRequest, NextResponse } from 'next/server';
 import { dbConnect } from '@/lib/db';
 import { Domain } from '@/models/Domain';
 
@@ -20,7 +20,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Phải upload một mảng JSON các kịch bản AI >= 1 phần tử!' }, { status: 400 });
   }
   // Validate từng object trong array
-  for (let s of scenario) {
+  for (const s of scenario) {
     if (typeof s !== 'object' || !s.description) {
       return NextResponse.json({ error: 'Từng kịch bản trong file phải có field description!' }, { status: 400 });
     }
